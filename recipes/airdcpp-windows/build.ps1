@@ -40,6 +40,9 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) { throw "$Exe failed with exit code $LASTEXITCODE" }
 }
 
+# CMake reads backslashes in a -D value as escapes once it lands in a list or a string.
+function ConvertTo-CMakePath([string]$Path) { $Path -replace '\\', '/' }
+
 function Get-Pinned {
     param([string]$Url, [string]$Sha256, [string]$OutFile)
     Invoke-WebRequest -Uri $Url -OutFile $OutFile -MaximumRetryCount 3 -RetryIntervalSec 5
@@ -99,11 +102,11 @@ $mzBuild = Join-Path $work 'minizip-build'
 Invoke-Checked cmake @(
     '-G', 'Ninja', '-S', (Join-Path $scriptDir 'minizip'), '-B', $mzBuild,
     "-DCMAKE_BUILD_TYPE=$buildType",
-    "-DCMAKE_INSTALL_PREFIX=$private",
+    "-DCMAKE_INSTALL_PREFIX=$(ConvertTo-CMakePath $private)",
     "-DCMAKE_PREFIX_PATH=$prefixPath",
     "-DCMAKE_MSVC_RUNTIME_LIBRARY=$msvcRuntime",
     '-DCMAKE_C_COMPILER=cl',
-    "-DZLIB_SOURCE_DIR=$zlibSrc"
+    "-DZLIB_SOURCE_DIR=$(ConvertTo-CMakePath $zlibSrc)"
 )
 Invoke-Checked cmake @('--build', $mzBuild, '-j', "$jobs")
 Invoke-Checked cmake @('--install', $mzBuild)
@@ -116,14 +119,14 @@ $airBuild = Join-Path $env:CVC_BUILD_DIR 'airdcpp'
 Invoke-Checked cmake @(
     '-G', 'Ninja', '-S', $src, '-B', $airBuild,
     "-DCMAKE_BUILD_TYPE=$buildType",
-    "-DCMAKE_INSTALL_PREFIX=$env:CVC_INSTALL_DIR",
+    "-DCMAKE_INSTALL_PREFIX=$(ConvertTo-CMakePath $env:CVC_INSTALL_DIR)",
     "-DCMAKE_PREFIX_PATH=$prefixPath",
     "-DCMAKE_MSVC_RUNTIME_LIBRARY=$msvcRuntime",
     '-DCMAKE_C_COMPILER=cl', '-DCMAKE_CXX_COMPILER=cl',
     # The core and the Web API are static libraries linked into AirDC.exe, as upstream builds them.
     '-DBUILD_SHARED_LIBS=OFF',
     "-DAIRDCPP_VERSION=$AirdcppVersion",
-    "-DPYTHON_EXECUTABLE=$($python.Source)",
+    "-DPYTHON_EXECUTABLE=$(ConvertTo-CMakePath $python.Source)",
     '-DENABLE_NATPMP=OFF',
     '-DENABLE_TBB=OFF'
 )

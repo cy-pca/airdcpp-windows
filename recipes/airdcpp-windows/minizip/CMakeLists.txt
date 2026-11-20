@@ -9,7 +9,9 @@ project(unofficial-minizip C)
 if (NOT ZLIB_SOURCE_DIR)
   message(FATAL_ERROR "ZLIB_SOURCE_DIR must point at an unpacked zlib source tree")
 endif ()
-set(src "${ZLIB_SOURCE_DIR}/contrib/minizip")
+# Forward slashes: a Windows path's backslashes would be read as escapes in the source list.
+file(TO_CMAKE_PATH "${ZLIB_SOURCE_DIR}" zlib_src)
+set(src "${zlib_src}/contrib/minizip")
 
 find_package(ZLIB REQUIRED)
 find_package(BZip2 REQUIRED)
