@@ -41,9 +41,10 @@ permissions:
   contents: read
 
 env:
-  # cy-pca/cvcpkg master with #623 (leveldb, websocketpp) plus the wtl, minizip and airdcpp-webui
-  # recipes (branch recipes-wtl-minizip-airdcpp-webui).
-  CVCPKG_DEPS_REF: 9c638dd74e952577e820705f48a737114c5e22bc
+  # cy-pca/cvcpkg#630 (wtl, minizip and airdcpp-webui recipes on master with #623's leveldb and
+  # websocketpp). The CLI comes from the same commit until #630 merges: wtl's source is a NuGet
+  # .nupkg, which cvcpkg master opens as a tarball (fixed in #630). Back to master after the merge.
+  CVCPKG_DEPS_REF: da7b0fee91d601c1340e065e33773d3a93afb372
   VCPKG_ROOT: ""
   VCPKG_INSTALLATION_ROOT: ""
 
@@ -80,6 +81,8 @@ jobs:
           $clean = ($env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\vcpkg(\\|$)' }) -join ';'
           "PATH=$clean" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - uses: ./.github/actions/setup-cvcpkg
+        with:
+          ref: ${{ env.CVCPKG_DEPS_REF }}
       - name: Dependencies (cvcpkg.org; the five unpublished ones from source)
         run: |
           set -euo pipefail
