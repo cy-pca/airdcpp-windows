@@ -9,8 +9,8 @@ recipe:
   # AirDC++ is GPL-3.0-or-later: upstream's LICENSE is the GPL-3.0 text, its changelog for this
   # release says "Change the license to GPLv3", and its source headers say "version 3 ... or any
   # later version" (a few older files say version 2 or later). WTL, compiled in, is MS-PL; the
-  # bundled Web UI (airdcpp-webui) is MIT; minizip, compiled in, is under the zlib licence.
-  license: "GPL-3.0-or-later AND MS-PL AND MIT AND Zlib"
+  # bundled Web UI (airdcpp-webui) is MIT.
+  license: "GPL-3.0-or-later AND MS-PL AND MIT"
   tags: [networking, p2p, direct-connect, desktop, gui]
   description: >-
     AirDC++ 4.30 for Windows, the native desktop Direct Connect (NMDC and ADC) client, built from
@@ -34,10 +34,17 @@ depends:
   build:
     - cmake
     - ninja
+    # Runs upstream's version and string-table generators.
+    - python312
     # Header-only, compiled in.
     - name: websocketpp
       version: "==0.8.2"
     - name: nlohmann-json
+    - name: wtl
+      version: "==10.0.10320"
+    # Copied to bin/Web-resources/.
+    - name: airdcpp-webui
+      version: "==2.14.0"
   runtime:
     - name: boost
     - name: openssl
@@ -46,6 +53,7 @@ depends:
     - name: miniupnpc
     - name: leveldb
     - name: libmaxminddb
+    - name: minizip
   host_tools: []
 
 build:
@@ -72,23 +80,23 @@ abi:
 toolchain:
   note: >-
     MSVC (Visual Studio 2022's C++ workload, as on GitHub's windows-2022 image, the one cvcpkg's
-    Windows bundles are built on), the Windows SDK, and python and tar.exe on PATH. Upstream's
-    build runs python to generate its version and string tables. build.ps1 sets up the
-    developer environment itself (vswhere) when cl.exe is not already on PATH.
+    Windows bundles are built on) and the Windows SDK, with ATL. Everything else is a cvcpkg
+    package: build.ps1 runs cmake, ninja and python (python312) from the build or dependency
+    prefix and refuses to build without them, so the machine's own copies are never used. It
+    sets up the developer environment itself (vswhere) when cl.exe is not already on PATH.
 
 notes:
   - title: "Dependencies: cvcpkg's own, and what it lacks"
     description: >-
-      Boost, OpenSSL, zlib, bzip2, miniupnpc, libmaxminddb, nlohmann-json, LevelDB and websocketpp
-      come from cvcpkg, as shared (/MD) DLLs where they are libraries, so AirDC.exe is built
-      against the dynamic CRT as well; upstream's own build links everything statically with
-      vcpkg. LevelDB and websocketpp have recipes in cy-pca/cvcpkg (#623) but are not on
-      cvcpkg.org yet. cvcpkg has no package for WTL, classic minizip, Snappy or libnatpmp:
-      build.ps1 downloads WTL 10.0.10320 (header-only, nuget.org's package of the SourceForge
-      release, sha256-pinned) and builds zlib 1.3.1's contrib/minizip (the "minizip" upstream
-      links, with bzip2 support; cvcpkg's minizip-ng is built without its compatibility layer)
-      into a private prefix; both are compiled into AirDC.exe and not shipped on their own.
-      NAT-PMP (libnatpmp) is off; UPnP port mapping works through miniupnpc and Windows' own UPnP.
+      Every dependency is a cvcpkg package. Boost, OpenSSL, zlib, bzip2, miniupnpc, libmaxminddb,
+      LevelDB and minizip (classic, the API upstream links as unofficial-minizip) are shared
+      (/MD) DLLs, so AirDC.exe is built against the dynamic CRT as well; upstream's own build
+      links everything statically with vcpkg. nlohmann-json, websocketpp and WTL are
+      header-only, and the Web UI (airdcpp-webui) is copied in. LevelDB and websocketpp come
+      from cy-pca/cvcpkg#623, and wtl, minizip and airdcpp-webui from a follow-up cy-pca/cvcpkg
+      pull request; none of these five is on cvcpkg.org yet. cvcpkg has no Snappy or libnatpmp:
+      Snappy is made optional (next note) and NAT-PMP is off. UPnP port mapping works through
+      miniupnpc and Windows' own UPnP.
   - title: "No Snappy: hash databases from other installs"
     description: >-
       cvcpkg's leveldb is built without Snappy, so the patch makes upstream's Snappy lookup
