@@ -2,6 +2,12 @@
 |:---:|:---:|:---:|
 | [![version](https://img.shields.io/github/release/airdcpp/airgit.svg?label=latest%20version)](https://github.com/airdcpp/airdcpp-windows/releases) | [![GitHub all releases](https://img.shields.io/github/downloads/airdcpp/airdcpp-windows/total "Download AirDC++")](https://github.com/airdcpp/airdcpp-windows/releases) | [![Build status](https://ci.appveyor.com/api/projects/status/o34twjd29dntvme3?svg=true)](https://ci.appveyor.com/project/maksis/airgit)
 
+> **About this fork.** cy-pca/airdcpp-windows is a fork of
+> [airdcpp/airdcpp-windows](https://github.com/airdcpp/airdcpp-windows) that holds the
+> [cvcpkg](https://cvcpkg.org) recipe for the AirDC++ Windows desktop client
+> (`recipes/airdcpp-windows`, built from upstream's release tags with MSVC) and its CI. It carries
+> no source changes; please report bugs and send changes to the upstream project.
+
 # AirDC++ for Windows
 
 ## Supported operating systems

@@ -1,0 +1,42 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -11,7 +11,13 @@
+ set (PROJECT_NAME "AirDC++")
+ set (TAG_APPLICATION "AirDC++")
+ set (APPLICATION_ID "airdcpp-windows")
+-set (VERSION "3.22b")
++# cvcpkg: a source tarball has no Git metadata for scripts/generate_version.py, so the release
++# version is passed in (AIRDCPP_VERSION) instead of the placeholder below.
++if (DEFINED AIRDCPP_VERSION)
++  set (VERSION "${AIRDCPP_VERSION}")
++else ()
++  set (VERSION "3.22b")
++endif ()
+ 
+ set(CMAKE_CXX_STANDARD 20)
+ set(CMAKE_CXX_STANDARD_REQUIRED YES)
+@@ -19,7 +25,11 @@
+ set(CMAKE_EXPORT_COMPILE_COMMANDS YES)
+ 
+ # global MSVC runtime linking for all project targets
+-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++# cvcpkg: links against its shared (/MD) dependency DLLs, so the runtime can be chosen on the
++# command line; the static runtime stays the default.
++if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
++  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++endif ()
+ # global debug postfix for libraries (executables still need to set it)
+ set(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Filename postfix for libraries under DEBUG configuration")
+ 
+--- a/airdcpp/CMakeLists.txt
++++ b/airdcpp/CMakeLists.txt
+@@ -64,7 +64,8 @@
+   # Shared LevelDB libraries are linked against Snappy already
+   # We need to link against Snappy manually when making portable builds
+   # (old hash databases wouldn't work otherwise)
+-  find_package (Snappy REQUIRED)
++  # cvcpkg: optional, as cvcpkg's leveldb is built without Snappy (see the recipe's notes).
++  find_package (Snappy)
+   
+   if (SNAPPY_FOUND)
+     list (APPEND airdcpp_extra_libs Snappy::snappy)

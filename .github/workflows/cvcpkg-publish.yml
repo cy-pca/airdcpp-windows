@@ -1,0 +1,94 @@
+name: cvcpkg publish
+
+# Publish recipes/airdcpp-windows to cvcpkg.org under the cy-pca organisation. Started by hand, on
+# master only: point the recipe at a new upstream release (upstream_version, source url and
+# sha256, and AirdcppVersion in build.ps1 and test.ps1; cvc_revision for a packaging-only
+# change), merge, then run this.
+#
+# The bundle is built as cvcpkg-recipe.yml builds it (windows-2022, Visual Studio 2022), with
+# recipes/airdcpp-windows/test.ps1 run on the staged tree before the pack, and its dependencies
+# taken from cvcpkg.org only: a bundle must never need something the registry cannot give the
+# person installing it. So it waits for leveldb and websocketpp to be on cvcpkg.org for Windows
+# (cy-pca/cvcpkg#623). After publishing, it is installed from cvcpkg.org into an empty prefix and
+# its test runs again there.
+#
+# The token is the CVCPKG_PUBLISHER_TOKEN repository secret: a cvcpkg.org publisher that is a
+# member of the cy-pca organisation. Only the publish step sees it. Without it the job builds,
+# tests and packs, then fails before publishing anything. Nothing is uploaded as an artifact.
+# cvcpkg publish skips a bundle the registry already has, so a second run is harmless.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: cvcpkg-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VCPKG_ROOT: ""
+  VCPKG_INSTALLATION_ROOT: ""
+
+jobs:
+  airdcpp-windows:
+    if: github.ref == 'refs/heads/master'
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Take vcpkg out of the environment
+        shell: pwsh
+        run: |
+          $clean = ($env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\vcpkg(\\|$)' }) -join ';'
+          "PATH=$clean" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - uses: ./.github/actions/setup-cvcpkg
+      - name: Dependencies (cvcpkg.org only)
+        run: |
+          set -euo pipefail
+          for dep in leveldb websocketpp; do
+            cvcpkg search "$dep" --platform windows --arch x86_64 --json \
+              | python -c 'import json,sys; n=sys.argv[1]; sys.exit(0 if any(p["name"]==n for p in json.load(sys.stdin)["packages"]) else 1)' "$dep" \
+              || { echo "::error::$dep is not on cvcpkg.org for windows yet (cy-pca/cvcpkg#623); publishing nothing"; exit 1; }
+          done
+          prefix="$(cygpath -m "$RUNNER_TEMP")/prefix"
+          echo "PREFIX=$prefix" >> "$GITHUB_ENV"
+          cvcpkg install-deps airdcpp-windows --platform windows --recipes-dir recipes \
+            --prefix "$prefix" --config release --link shared \
+            --no-fallback-to-source --include-host-tools
+      - name: Build, test and pack
+        run: |
+          set -euo pipefail
+          cvcpkg pack airdcpp-windows --local --platform windows --recipes-dir recipes \
+            --prefix "$PREFIX" --config release --link shared --output-dir dist
+          ls -l dist/
+          n=$(ls dist/airdcpp-windows-[0-9]*-windows-x86_64-release-shared.zip | wc -l)
+          [ "$n" = 1 ] || { echo "::error::expected one airdcpp-windows bundle, packed $n"; exit 1; }
+      - name: Publish
+        env:
+          CVCPKG_TOKEN: ${{ secrets.CVCPKG_PUBLISHER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CVCPKG_TOKEN:-}" ]; then
+            echo "::error::no CVCPKG_PUBLISHER_TOKEN secret: the bundle packed but was not published"
+            exit 1
+          fi
+          cvcpkg publish dist/airdcpp-windows-[0-9]*.zip --server https://cvcpkg.org --org cy-pca
+          # The server-side recipe row (the package page, the dependency graph). An upsert.
+          cvcpkg recipe push airdcpp-windows --recipes-dir recipes --no-default-recipes \
+            --server https://cvcpkg.org --org cy-pca
+      - name: Install it from cvcpkg.org and test it there
+        run: |
+          set -euo pipefail
+          check="$(cygpath -m "$RUNNER_TEMP")/check"
+          cvcpkg install airdcpp-windows --platform windows --prefix "$check" --config release \
+            --link shared --no-fallback-to-source
+          CVC_INSTALL_DIR="$check" CVC_DEPS_PREFIX="$check" bash recipes/airdcpp-windows/test.sh

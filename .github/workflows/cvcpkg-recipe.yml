@@ -1,0 +1,95 @@
+name: cvcpkg recipe
+
+# Builds recipes/airdcpp-windows as cvcpkg-publish.yml does, and throws the result away.
+# `cvcpkg pack` builds AirDC.exe from upstream's source with MSVC into the prefix, runs
+# recipes/airdcpp-windows/test.ps1 on the staged tree (the files, AirDC.exe's DLLs, then a
+# headless start: its Web API reports the version, the Web UI is served, the shutdown call ends
+# it), checks its globs and archives it. Nothing is published or uploaded.
+#
+# windows-2022 (Visual Studio 2022), the image cvcpkg's own Windows bundles are built on, so
+# AirDC.exe and the dependency DLLs it loads come from the same toolchain. The image's vcpkg is
+# taken out of the environment: every dependency comes from cvcpkg.
+#
+# leveldb and websocketpp, which AirDC++ needs, have recipes in cy-pca/cvcpkg (#623) but are not
+# on cvcpkg.org yet. Until they are, this builds them from that commit's recipes
+# (CVCPKG_DEPS_REF), overlaid with --recipes-dir; once cvcpkg.org has them the overlay is unused
+# and can go.
+#
+# GitHub-hosted runners only: this repository is public, and a pull request's workflows must
+# never reach self-hosted runners.
+
+on:
+  pull_request:
+    paths:
+      - 'recipes/airdcpp-windows/**'
+      - '.github/workflows/cvcpkg-recipe.yml'
+      - '.github/actions/setup-cvcpkg/**'
+  push:
+    branches: [master]
+    paths:
+      - 'recipes/airdcpp-windows/**'
+      - '.github/workflows/cvcpkg-recipe.yml'
+      - '.github/actions/setup-cvcpkg/**'
+  workflow_dispatch:
+
+concurrency:
+  group: cvcpkg-recipe-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # cy-pca/cvcpkg#623, merged (leveldb 1.23, websocketpp 0.8.2).
+  CVCPKG_DEPS_REF: 80255a6cc73ded9eab0eb2e7927affa9400d774b
+  VCPKG_ROOT: ""
+  VCPKG_INSTALLATION_ROOT: ""
+
+jobs:
+  airdcpp-windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: leveldb and websocketpp recipes (cy-pca/cvcpkg#623)
+        uses: actions/checkout@v4
+        with:
+          repository: cy-pca/cvcpkg
+          ref: ${{ env.CVCPKG_DEPS_REF }}
+          path: .cvcpkg-deps
+          persist-credentials: false
+          sparse-checkout: |
+            recipes/_common
+            recipes/leveldb
+            recipes/websocketpp
+      - name: MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Take vcpkg out of the environment
+        shell: pwsh
+        run: |
+          $clean = ($env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\vcpkg(\\|$)' }) -join ';'
+          "PATH=$clean" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - uses: ./.github/actions/setup-cvcpkg
+      - name: Dependencies (cvcpkg.org; leveldb and websocketpp from source until published)
+        run: |
+          set -euo pipefail
+          prefix="$(cygpath -m "$RUNNER_TEMP")/prefix"
+          echo "PREFIX=$prefix" >> "$GITHUB_ENV"
+          cl 2>&1 | head -1
+          cvcpkg install-deps airdcpp-windows --platform windows \
+            --recipes-dir .cvcpkg-deps/recipes --recipes-dir recipes \
+            --prefix "$prefix" --config release --link shared \
+            --fallback-to-source --include-host-tools
+      - name: Build, test and pack
+        run: |
+          set -euo pipefail
+          cvcpkg pack airdcpp-windows --local --platform windows \
+            --recipes-dir .cvcpkg-deps/recipes --recipes-dir recipes \
+            --prefix "$PREFIX" --config release --link shared --output-dir dist
+          ls -l dist/
+          ls dist/airdcpp-windows-4.30+cvc.*-windows-x86_64-release-shared.zip

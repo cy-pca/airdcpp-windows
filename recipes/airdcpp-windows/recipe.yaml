@@ -1,0 +1,141 @@
+schema_version: 1
+recipe:
+  name: airdcpp-windows
+  upstream_version: "4.30"
+  cvc_revision: 1
+  maintainer: "cy-pca"
+  maintainer_url: "https://github.com/cy-pca/airdcpp-windows"
+  homepage: https://airdcpp.net/
+  # AirDC++ is GPL-3.0-or-later: upstream's LICENSE is the GPL-3.0 text, its changelog for this
+  # release says "Change the license to GPLv3", and its source headers say "version 3 ... or any
+  # later version" (a few older files say version 2 or later). WTL, compiled in, is MS-PL; the
+  # bundled Web UI (airdcpp-webui) is MIT; minizip, compiled in, is under the zlib licence.
+  license: "GPL-3.0-or-later AND MS-PL AND MIT AND Zlib"
+  tags: [networking, p2p, direct-connect, desktop, gui]
+  description: >-
+    AirDC++ 4.30 for Windows, the native desktop Direct Connect (NMDC and ADC) client, built from
+    upstream's source with MSVC: bin/AirDC.exe with the runtime files upstream's portable release
+    ships beside it (the Web UI 2.14.0 for its built-in web server, emoticon packs, themes and the
+    boot file). Settings go to Documents\AirDC++ as with an installed copy. Windows x64.
+
+# Upstream source: https://github.com/airdcpp/airdcpp-windows, tag 4.30 (91422cd), its newest
+# stable release. This recipe lives in the cy-pca/airdcpp-windows fork, which carries no source
+# changes; the build changes it needs are the patch below.
+source:
+  type: tarball
+  url: https://github.com/airdcpp/airdcpp-windows/archive/refs/tags/4.30.tar.gz
+  sha256: "a91fae7a314cea4effd8259735acabb64bbc5eeb41d8e08bf3a597677e49255d"
+  strip_components: 1
+
+patches:
+  - patches/0001-cvcpkg-version-runtime-snappy.patch
+
+depends:
+  build:
+    - cmake
+    - ninja
+    # Header-only, compiled in.
+    - name: websocketpp
+      version: "==0.8.2"
+    - name: nlohmann-json
+  runtime:
+    - name: boost
+    - name: openssl
+    - name: zlib
+    - name: bzip2
+    - name: miniupnpc
+    - name: leveldb
+    - name: libmaxminddb
+  host_tools: []
+
+build:
+  matrix:
+    - platform: windows
+      script: build.ps1
+
+package:
+  files:
+    - bin/AirDC.exe
+    - bin/dcppboot.xml
+    - bin/popup.bmp
+    - bin/EmoPacks/
+    - bin/Themes/
+    - bin/Web-resources/
+    - share/licenses/airdcpp-windows/
+
+test:
+  script: test.sh
+
+abi:
+  cxx_std: 20
+
+toolchain:
+  note: >-
+    MSVC (Visual Studio 2022's C++ workload, as on GitHub's windows-2022 image, the one cvcpkg's
+    Windows bundles are built on), the Windows SDK, and python and tar.exe on PATH. Upstream's
+    build runs python to generate its version and string tables. build.ps1 sets up the
+    developer environment itself (vswhere) when cl.exe is not already on PATH.
+
+notes:
+  - title: "Dependencies: cvcpkg's own, and what it lacks"
+    description: >-
+      Boost, OpenSSL, zlib, bzip2, miniupnpc, libmaxminddb, nlohmann-json, LevelDB and websocketpp
+      come from cvcpkg, as shared (/MD) DLLs where they are libraries, so AirDC.exe is built
+      against the dynamic CRT as well; upstream's own build links everything statically with
+      vcpkg. LevelDB and websocketpp have recipes in cy-pca/cvcpkg (#623) but are not on
+      cvcpkg.org yet. cvcpkg has no package for WTL, classic minizip, Snappy or libnatpmp:
+      build.ps1 downloads WTL 10.0.10320 (header-only, nuget.org's package of the SourceForge
+      release, sha256-pinned) and builds zlib 1.3.1's contrib/minizip (the "minizip" upstream
+      links, with bzip2 support; cvcpkg's minizip-ng is built without its compatibility layer)
+      into a private prefix; both are compiled into AirDC.exe and not shipped on their own.
+      NAT-PMP (libnatpmp) is off; UPnP port mapping works through miniupnpc and Windows' own UPnP.
+  - title: "No Snappy: hash databases from other installs"
+    description: >-
+      cvcpkg's leveldb is built without Snappy, so the patch makes upstream's Snappy lookup
+      optional. A fresh settings directory works. A hash database (HashData) copied or migrated
+      from an official AirDC++ install, whose blocks are Snappy-compressed, cannot be read and has
+      to be rebuilt by rehashing the share. A leveldb built with Snappy (and a snappy recipe) in
+      cvcpkg would remove this.
+  - title: "The patch"
+    description: >-
+      patches/0001-cvcpkg-version-runtime-snappy.patch, against upstream's top-level and core
+      CMakeLists.txt: (1) the version comes from -DAIRDCPP_VERSION, because a source tarball has
+      no Git metadata for scripts/generate_version.py and the tree's placeholder (3.22b) would be
+      compiled in; (2) CMAKE_MSVC_RUNTIME_LIBRARY can be set on the command line (upstream forces
+      the static CRT); (3) Snappy is optional. Each keeps upstream's behaviour when the option is
+      not given.
+  - title: "Layout and settings"
+    description: >-
+      AirDC.exe goes in bin/, beside the DLLs of its dependencies, with upstream's portable
+      layout around it: Web-resources/, EmoPacks/, Themes/, popup.bmp and dcppboot.xml.
+      dcppboot.xml is upstream's installed-mode file (LocalMode 0), so settings, queue and
+      hash data go to Documents\AirDC++ and %LOCALAPPDATA%\AirDC++, not into the prefix. For a
+      portable copy, put a dcppboot.xml.user with LocalMode 1 (and optionally ConfigPath) next
+      to AirDC.exe; it takes precedence. Release builds carry no PDB.
+  - title: "MSVC runtime"
+    description: >-
+      The Visual C++ 2015-2022 x64 runtime (vcruntime140.dll, msvcp140.dll) is not in the bundle,
+      as with cvcpkg's other Windows packages: it comes from the system (Microsoft's VC++
+      Redistributable, present on most Windows 10 and 11 machines) or the consumer's prefix.
+  - title: "Not included: Node.js, the installer, the updater's own builds"
+    description: >-
+      Upstream's portable release also carries Node.js (node.exe) for extensions. It is not in
+      this bundle: extensions run with a node.exe placed in Node.js\ beside AirDC.exe or found on
+      PATH (upstream's default engine setting tries both). The NSIS installer is not built.
+      The client's own updater stays as upstream ships it (it prompts when a new release
+      appears); accepting an update replaces AirDC.exe in the prefix with upstream's release
+      build.
+  - title: "Smoke test"
+    description: >-
+      test.ps1 (run through test.sh) checks the files and that AirDC.exe is an x64 GUI
+      executable whose imported DLLs are all in the bundle, the dependency prefix or Windows
+      (dumpbin). It then starts a temporary copy in LocalMode, with settings prepared so the
+      setup wizard stays closed and the built-in web server listens on 127.0.0.1. It checks
+      that the Web API reports AirDC++ 4.30, that the Web UI is served from the bundle, and that
+      the API's shutdown call ends the process with exit code 0.
+  - title: "Platforms"
+    description: >-
+      windows-x86_64, built, smoke-tested and packed in cy-pca/airdcpp-windows's CI
+      (.github/workflows/cvcpkg-recipe.yml) on GitHub's windows-2022 image. Upstream also builds
+      x86 (32-bit); this recipe does not. The Linux and macOS client is airdcpp-webclient
+      (cy-pca/airdcpp-webclient).
