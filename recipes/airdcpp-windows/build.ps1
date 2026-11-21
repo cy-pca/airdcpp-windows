@@ -147,7 +147,7 @@ Shipped beside it:
 - EmoPacks\, Themes\, popup.bmp and dcppboot.xml, from upstream's installer\ directory.
 
 Every DLL AirDC.exe loads comes from its own cvcpkg package (boost, openssl, zlib, bzip2,
-miniupnpc, leveldb, libmaxminddb, minizip), with that package's licence under share\licenses\.
+miniupnpc, leveldb, snappy, libmaxminddb, minizip), with that package's licence under share\licenses\.
 "@ | Set-Content -Encoding utf8NoBOM -LiteralPath (Join-Path $licenses 'README')
 
 Write-Host "cvcpkg: airdcpp-windows -> $env:CVC_INSTALL_DIR (bin\AirDC.exe and its runtime files)"

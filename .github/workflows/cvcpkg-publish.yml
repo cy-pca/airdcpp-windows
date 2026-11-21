@@ -8,8 +8,8 @@ name: cvcpkg publish
 # The bundle is built as cvcpkg-recipe.yml builds it (windows-2022, Visual Studio 2022), with
 # recipes/airdcpp-windows/test.ps1 run on the staged tree before the pack, and its dependencies
 # taken from cvcpkg.org only: a bundle must never need something the registry cannot give the
-# person installing it. So it waits for leveldb, websocketpp, wtl, minizip and airdcpp-webui to be
-# on cvcpkg.org for Windows. After publishing, it is installed from cvcpkg.org into an empty prefix and
+# person installing it. So it waits for snappy, leveldb, websocketpp, wtl, minizip and
+# airdcpp-webui to be on cvcpkg.org for Windows. After publishing, it is installed from cvcpkg.org into an empty prefix and
 # its test runs again there.
 #
 # The token is the CVCPKG_PUBLISHER_TOKEN repository secret: a cvcpkg.org publisher that is a
@@ -54,7 +54,7 @@ jobs:
       - name: Dependencies (cvcpkg.org only)
         run: |
           set -euo pipefail
-          for dep in leveldb websocketpp wtl minizip airdcpp-webui; do
+          for dep in snappy leveldb websocketpp wtl minizip airdcpp-webui; do
             platform=windows; [ "$dep" = airdcpp-webui ] && platform=any
             cvcpkg search "$dep" --platform "$platform" --json \
               | python -c 'import json,sys; n=sys.argv[1]; sys.exit(0 if any(p["name"]==n for p in json.load(sys.stdin)["packages"]) else 1)' "$dep" \

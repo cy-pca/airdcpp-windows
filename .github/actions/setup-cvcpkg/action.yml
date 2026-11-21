@@ -1,7 +1,7 @@
 name: Set up cvcpkg
 description: >
   The cvcpkg CLI from cy-pca/cvcpkg (master unless a ref is given) on Python 3.12, as
-  cy-pca/nicotina's CI installs it.
+  cy-pca/nicotina's CI installs it, with its publish extra (httpx), which `cvcpkg publish` needs.
 inputs:
   ref:
     description: cy-pca/cvcpkg branch, tag or commit to install the CLI from.
@@ -16,5 +16,5 @@ runs:
       env:
         CVCPKG_CLI_REF: ${{ inputs.ref }}
       run: |
-        python -m pip install --quiet "cvcpkg @ git+https://github.com/cy-pca/cvcpkg@${CVCPKG_CLI_REF}"
+        python -m pip install --quiet "cvcpkg[publish] @ git+https://github.com/cy-pca/cvcpkg@${CVCPKG_CLI_REF}"
         echo "cvcpkg: $(command -v cvcpkg) $(cvcpkg --version)"
