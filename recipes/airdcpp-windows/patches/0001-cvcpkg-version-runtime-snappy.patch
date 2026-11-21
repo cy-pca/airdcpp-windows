@@ -30,13 +30,13 @@
  
 --- a/airdcpp/CMakeLists.txt
 +++ b/airdcpp/CMakeLists.txt
-@@ -64,7 +64,8 @@
-   # Shared LevelDB libraries are linked against Snappy already
-   # We need to link against Snappy manually when making portable builds
+@@ -66,7 +66,8 @@
    # (old hash databases wouldn't work otherwise)
--  find_package (Snappy REQUIRED)
-+  # cvcpkg: optional, as cvcpkg's leveldb is built without Snappy (see the recipe's notes).
-+  find_package (Snappy)
+   find_package (Snappy REQUIRED)
    
-   if (SNAPPY_FOUND)
+-  if (SNAPPY_FOUND)
++  # cvcpkg: Snappy's CMake package sets Snappy_FOUND, never SNAPPY_FOUND, so test the target.
++  if (TARGET Snappy::snappy)
      list (APPEND airdcpp_extra_libs Snappy::snappy)
+   endif ()
+ endif ()
