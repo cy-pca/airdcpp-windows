@@ -28,15 +28,3 @@
  # global debug postfix for libraries (executables still need to set it)
  set(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Filename postfix for libraries under DEBUG configuration")
  
---- a/airdcpp/CMakeLists.txt
-+++ b/airdcpp/CMakeLists.txt
-@@ -64,7 +64,8 @@
-   # Shared LevelDB libraries are linked against Snappy already
-   # We need to link against Snappy manually when making portable builds
-   # (old hash databases wouldn't work otherwise)
--  find_package (Snappy REQUIRED)
-+  # cvcpkg: optional, as cvcpkg's leveldb is built without Snappy (see the recipe's notes).
-+  find_package (Snappy)
-   
-   if (SNAPPY_FOUND)
-     list (APPEND airdcpp_extra_libs Snappy::snappy)

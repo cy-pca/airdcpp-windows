@@ -10,10 +10,10 @@ name: cvcpkg recipe
 # AirDC.exe and the dependency DLLs it loads come from the same toolchain. The image's vcpkg is
 # taken out of the environment: every dependency comes from cvcpkg.
 #
-# Five of AirDC++'s dependencies have recipes in cy-pca/cvcpkg but are not on cvcpkg.org yet:
-# leveldb and websocketpp (#623, merged), wtl, minizip and airdcpp-webui (the follow-up pull
-# request). Until they are published, this builds them from CVCPKG_DEPS_REF's recipes, overlaid
-# with --recipes-dir; once cvcpkg.org has them the overlay is unused and can go. Every other
+# Any dependency cvcpkg.org does not have yet (wtl, minizip and airdcpp-webui, merged in
+# cy-pca/cvcpkg#630, until their bundles are published) is built from cy-pca/cvcpkg's recipes at
+# CVCPKG_DEPS_REF, overlaid with --recipes-dir; --fallback-to-source only builds what the
+# registry lacks. Once cvcpkg.org has them all, the overlay is unused and can go. Every other
 # dependency and tool (cmake, ninja, python312) is installed from cvcpkg.org.
 #
 # GitHub-hosted runners only: this repository is public, and a pull request's workflows must
@@ -41,10 +41,9 @@ permissions:
   contents: read
 
 env:
-  # cy-pca/cvcpkg#630 (wtl, minizip and airdcpp-webui recipes on master with #623's leveldb and
-  # websocketpp). The CLI comes from the same commit until #630 merges: wtl's source is a NuGet
-  # .nupkg, which cvcpkg master opens as a tarball (fixed in #630). Back to master after the merge.
-  CVCPKG_DEPS_REF: da7b0fee91d601c1340e065e33773d3a93afb372
+  # cy-pca/cvcpkg master after #630 (wtl, minizip, airdcpp-webui) and #631 (snappy, leveldb with
+  # Snappy).
+  CVCPKG_DEPS_REF: 65b93b80c833d7e3465c2f69fcfe2d24133cf06d
   VCPKG_ROOT: ""
   VCPKG_INSTALLATION_ROOT: ""
 
@@ -67,6 +66,7 @@ jobs:
           sparse-checkout: |
             recipes/_common
             recipes/leveldb
+            recipes/snappy
             recipes/websocketpp
             recipes/wtl
             recipes/minizip
@@ -81,8 +81,6 @@ jobs:
           $clean = ($env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\vcpkg(\\|$)' }) -join ';'
           "PATH=$clean" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - uses: ./.github/actions/setup-cvcpkg
-        with:
-          ref: ${{ env.CVCPKG_DEPS_REF }}
       - name: Dependencies (cvcpkg.org; the five unpublished ones from source)
         run: |
           set -euo pipefail
