@@ -1,0 +1,103 @@
+name: cvcpkg recipe
+
+# Builds recipes/airdcpp-windows as cvcpkg-publish.yml does, and throws the result away.
+# `cvcpkg pack` builds AirDC.exe from upstream's source with MSVC into the prefix, runs
+# recipes/airdcpp-windows/test.ps1 on the staged tree (the files, AirDC.exe's DLLs, then a
+# headless start: its Web API reports the version, the Web UI is served, the shutdown call ends
+# it), checks its globs and archives it. Nothing is published or uploaded.
+#
+# windows-2022 (Visual Studio 2022), the image cvcpkg's own Windows bundles are built on, so
+# AirDC.exe and the dependency DLLs it loads come from the same toolchain. The image's vcpkg is
+# taken out of the environment: every dependency comes from cvcpkg.
+#
+# Five of AirDC++'s dependencies have recipes in cy-pca/cvcpkg but are not on cvcpkg.org yet:
+# leveldb and websocketpp (#623, merged), wtl, minizip and airdcpp-webui (the follow-up pull
+# request). Until they are published, this builds them from CVCPKG_DEPS_REF's recipes, overlaid
+# with --recipes-dir; once cvcpkg.org has them the overlay is unused and can go. Every other
+# dependency and tool (cmake, ninja, python312) is installed from cvcpkg.org.
+#
+# GitHub-hosted runners only: this repository is public, and a pull request's workflows must
+# never reach self-hosted runners.
+
+on:
+  pull_request:
+    paths:
+      - 'recipes/airdcpp-windows/**'
+      - '.github/workflows/cvcpkg-recipe.yml'
+      - '.github/actions/setup-cvcpkg/**'
+  push:
+    branches: [master]
+    paths:
+      - 'recipes/airdcpp-windows/**'
+      - '.github/workflows/cvcpkg-recipe.yml'
+      - '.github/actions/setup-cvcpkg/**'
+  workflow_dispatch:
+
+concurrency:
+  group: cvcpkg-recipe-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # cy-pca/cvcpkg#630 (wtl, minizip and airdcpp-webui recipes on master with #623's leveldb and
+  # websocketpp). The CLI comes from the same commit until #630 merges: wtl's source is a NuGet
+  # .nupkg, which cvcpkg master opens as a tarball (fixed in #630). Back to master after the merge.
+  CVCPKG_DEPS_REF: da7b0fee91d601c1340e065e33773d3a93afb372
+  VCPKG_ROOT: ""
+  VCPKG_INSTALLATION_ROOT: ""
+
+jobs:
+  airdcpp-windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recipes not on cvcpkg.org yet (cy-pca/cvcpkg)
+        uses: actions/checkout@v4
+        with:
+          repository: cy-pca/cvcpkg
+          ref: ${{ env.CVCPKG_DEPS_REF }}
+          path: .cvcpkg-deps
+          persist-credentials: false
+          sparse-checkout: |
+            recipes/_common
+            recipes/leveldb
+            recipes/websocketpp
+            recipes/wtl
+            recipes/minizip
+            recipes/airdcpp-webui
+      - name: MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Take vcpkg out of the environment
+        shell: pwsh
+        run: |
+          $clean = ($env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\vcpkg(\\|$)' }) -join ';'
+          "PATH=$clean" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - uses: ./.github/actions/setup-cvcpkg
+        with:
+          ref: ${{ env.CVCPKG_DEPS_REF }}
+      - name: Dependencies (cvcpkg.org; the five unpublished ones from source)
+        run: |
+          set -euo pipefail
+          prefix="$(cygpath -m "$RUNNER_TEMP")/prefix"
+          echo "PREFIX=$prefix" >> "$GITHUB_ENV"
+          cl 2>&1 | head -1
+          cvcpkg install-deps airdcpp-windows --platform windows \
+            --recipes-dir .cvcpkg-deps/recipes --recipes-dir recipes \
+            --prefix "$prefix" --config release --link shared \
+            --fallback-to-source --include-host-tools
+      - name: Build, test and pack
+        run: |
+          set -euo pipefail
+          cvcpkg pack airdcpp-windows --local --platform windows \
+            --recipes-dir .cvcpkg-deps/recipes --recipes-dir recipes \
+            --prefix "$PREFIX" --config release --link shared --output-dir dist
+          ls -l dist/
+          ls dist/airdcpp-windows-4.30+cvc.*-windows-x86_64-release-shared.zip

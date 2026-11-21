@@ -1,0 +1,4 @@
+# The cvcpkg recipe's files keep LF on every checkout, whatever core.autocrlf says (the top-level
+# "text=crlf" is not a value git acts on, so Git for Windows' autocrlf would make them CRLF):
+# cvcpkg runs test.sh with bash, and the patch applies to upstream's LF source tarball.
+* text eol=lf
