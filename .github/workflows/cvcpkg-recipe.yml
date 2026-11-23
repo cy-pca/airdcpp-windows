@@ -10,11 +10,9 @@ name: cvcpkg recipe
 # AirDC.exe and the dependency DLLs it loads come from the same toolchain. The image's vcpkg is
 # taken out of the environment: every dependency comes from cvcpkg.
 #
-# Six of AirDC++'s dependencies are recent cy-pca/cvcpkg recipes: leveldb and websocketpp (#623),
-# snappy (#631, with leveldb 1.23+cvc.2 built against it), wtl, minizip and airdcpp-webui (#630).
-# Any of them cvcpkg.org does not have yet is built from CVCPKG_DEPS_REF's recipes, overlaid
-# with --recipes-dir; once cvcpkg.org has them all the overlay is unused and can go. Every other
-# dependency and tool (cmake, ninja, python312) is installed from cvcpkg.org.
+# Every dependency and tool (cmake, ninja, python312) is installed from cvcpkg.org, with no
+# fallback to a source build, as cvcpkg-publish.yml installs them: a dependency missing from the
+# registry fails here rather than being built quietly.
 #
 # GitHub-hosted runners only: this repository is public, and a pull request's workflows must
 # never reach self-hosted runners.
@@ -41,9 +39,6 @@ permissions:
   contents: read
 
 env:
-  # cy-pca/cvcpkg master after #630 (wtl, minizip, airdcpp-webui) and #631 (snappy, leveldb
-  # 1.23+cvc.2) merged. The CLI is master's (setup-cvcpkg's default).
-  CVCPKG_DEPS_REF: 65b93b80c833d7e3465c2f69fcfe2d24133cf06d
   VCPKG_ROOT: ""
   VCPKG_INSTALLATION_ROOT: ""
 
@@ -56,21 +51,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Recipes not on cvcpkg.org yet (cy-pca/cvcpkg)
-        uses: actions/checkout@v4
-        with:
-          repository: cy-pca/cvcpkg
-          ref: ${{ env.CVCPKG_DEPS_REF }}
-          path: .cvcpkg-deps
-          persist-credentials: false
-          sparse-checkout: |
-            recipes/_common
-            recipes/snappy
-            recipes/leveldb
-            recipes/websocketpp
-            recipes/wtl
-            recipes/minizip
-            recipes/airdcpp-webui
       - name: MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -81,21 +61,19 @@ jobs:
           $clean = ($env:PATH -split ';' | Where-Object { $_ -and $_ -notmatch '\\vcpkg(\\|$)' }) -join ';'
           "PATH=$clean" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - uses: ./.github/actions/setup-cvcpkg
-      - name: Dependencies (cvcpkg.org; any unpublished ones from source)
+      - name: Dependencies (cvcpkg.org only)
         run: |
           set -euo pipefail
           prefix="$(cygpath -m "$RUNNER_TEMP")/prefix"
           echo "PREFIX=$prefix" >> "$GITHUB_ENV"
           cl 2>&1 | head -1
-          cvcpkg install-deps airdcpp-windows --platform windows \
-            --recipes-dir .cvcpkg-deps/recipes --recipes-dir recipes \
+          cvcpkg install-deps airdcpp-windows --platform windows --recipes-dir recipes \
             --prefix "$prefix" --config release --link shared \
-            --fallback-to-source --include-host-tools
+            --no-fallback-to-source --include-host-tools
       - name: Build, test and pack
         run: |
           set -euo pipefail
-          cvcpkg pack airdcpp-windows --local --platform windows \
-            --recipes-dir .cvcpkg-deps/recipes --recipes-dir recipes \
+          cvcpkg pack airdcpp-windows --local --platform windows --recipes-dir recipes \
             --prefix "$PREFIX" --config release --link shared --output-dir dist
           ls -l dist/
           ls dist/airdcpp-windows-4.30+cvc.*-windows-x86_64-release-shared.zip
